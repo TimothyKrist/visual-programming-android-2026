@@ -1,0 +1,50 @@
+package com.example.todolistproject.views
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.example.todolistproject.models.TodoDto
+import com.example.todolistproject.viewmodels.TodoListViewModel
+
+@Composable
+fun TodoListView(model: TodoListViewModel, token: String, sessionVersion: Int, onAdd: () -> Unit, onOpen: (TodoDto) -> Unit, onLogout: () -> Unit) {
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (!model.loading) { model.clear(); model.load(token, sessionVersion) }
+    }
+    BackHandler(enabled = model.loading) {}
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (model.isCurrentSession(sessionVersion)) RequestStatus(model)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onAdd, enabled = !model.loading && model.isCurrentSession(sessionVersion)) { Text("Add todo") }
+            OutlinedButton(onClick = { model.load(token, sessionVersion) }, enabled = !model.loading && model.isCurrentSession(sessionVersion)) { Text("Refresh") }
+            TextButton(onClick = onLogout, enabled = !model.loading && model.isCurrentSession(sessionVersion)) { Text("Log out") }
+        }
+        if (model.isCurrentSession(sessionVersion) && model.todos.isEmpty() && !model.loading && model.error == null) Text("No todos yet.")
+        LazyColumn {
+            items(if (model.isCurrentSession(sessionVersion)) model.todos else emptyList(), key = { it.id }) { todo ->
+                Column(Modifier.fillMaxWidth().clickable(enabled = !model.loading && model.isCurrentSession(sessionVersion)) { onOpen(todo) }.padding(vertical = 14.dp)) {
+                    Text(todo.title, style = MaterialTheme.typography.titleMedium)
+                    Text(if (todo.completed) "Completed" else "Not completed")
+                }
+                HorizontalDivider()
+            }
+        }
+    }
+}
