@@ -23,11 +23,14 @@ class TodoDetailViewModel(private val repository: TodoRepository, onSessionExpir
 
     fun load(token: String, id: String) {
         if (loading) return
-        if (loadedId != id) confirmDelete = false
+        if (loadedId != id) {
+            confirmDelete = false
+            todo = null
+        }
         loadedId = id
-        todo = null
         request { todo = repository.todo(token, id) }
     }
+    fun update(todo: TodoDto) { this.todo = todo }
     fun delete(token: String, id: String, onSuccess: () -> Unit) = request {
         repository.delete(token, id)
         onSuccess()

@@ -30,6 +30,7 @@ import com.example.todolistproject.repositories.TodoRepository
 import com.example.todolistproject.services.AuthService
 import com.example.todolistproject.services.TodoService
 import com.example.todolistproject.viewmodels.AppViewModel
+import kotlinx.coroutines.CompletableDeferred
 import com.example.todolistproject.views.TodoApp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -112,6 +113,49 @@ class NavigationTest {
         assertRoute(LoginDestination::class, null)
     }
 
+    @Test fun mutationsUpdatePreviousScreensBeforeRefreshCompletes() {
+        start()
+        fillAuth()
+        click("Log in")
+        click("Add todo")
+        compose.onNodeWithText("Title").performTextInput("Added")
+        val addRefresh = CompletableDeferred<Unit>()
+        compose.runOnIdle { api.listGate = addRefresh }
+        click("Save")
+        assertRoute(TodoListDestination::class, null)
+        compose.onNodeWithText("Added").assertIsDisplayed()
+        compose.runOnIdle { api.listGate = null; addRefresh.complete(Unit) }
+
+        click("Added")
+        click("Edit")
+        compose.onNodeWithText("Title").performTextClearance()
+        compose.onNodeWithText("Title").performTextInput("Changed")
+        val detailRefresh = CompletableDeferred<Unit>()
+        compose.runOnIdle { api.detailGate = detailRefresh }
+        click("Save")
+        assertRoute(TodoDetailDestination::class, TodoListDestination::class)
+        compose.onNodeWithText("Changed").assertIsDisplayed()
+        compose.onNodeWithText("Added").assertDoesNotExist()
+        compose.runOnIdle { api.detailGate = null; detailRefresh.complete(Unit) }
+
+        val listRefresh = CompletableDeferred<Unit>()
+        compose.runOnIdle { api.listGate = listRefresh }
+        back()
+        compose.onNodeWithText("Changed").assertIsDisplayed()
+        compose.onNodeWithText("Added").assertDoesNotExist()
+        compose.runOnIdle { api.listGate = null; listRefresh.complete(Unit) }
+
+        click("Changed")
+        click("Delete")
+        val deleteRefresh = CompletableDeferred<Unit>()
+        compose.runOnIdle { api.listGate = deleteRefresh }
+        compose.onAllNodes(hasText("Delete") and hasClickAction()).onLast().performClick()
+        assertRoute(TodoListDestination::class, null)
+        compose.onNodeWithText("Changed").assertDoesNotExist()
+        compose.onNodeWithText("Task").assertIsDisplayed()
+        compose.runOnIdle { api.listGate = null; deleteRefresh.complete(Unit) }
+    }
+
     @Test fun registrationAndSessionExpiryClearTheBackStack() {
         start()
         click("Need an account? Register")
@@ -135,20 +179,31 @@ class NavigationTest {
     private class FakeApi : AuthService, TodoService {
         var expired = false
         val id = "id/with ?#%"
-        private var item = TodoDto(id, "Task", null, false, "user", "created", "updated")
+        var listGate: CompletableDeferred<Unit>? = null
+        var detailGate: CompletableDeferred<Unit>? = null
+        private val items = mutableListOf(TodoDto(id, "Task", null, false, "user", "created", "updated"))
         override suspend fun login(credentials: CredentialsDto) = AuthResponseDto("token")
         override suspend fun register(credentials: CredentialsDto) = AuthResponseDto("token")
-        override suspend fun todos(authorization: String) = listOf(item)
+        override suspend fun todos(authorization: String): List<TodoDto> {
+            listGate?.await()
+            return items.toList()
+        }
         override suspend fun todo(authorization: String, id: String): TodoDto {
-            assertEquals(this.id, id)
             if (expired) throw HttpException(Response.error<Any>(401, ResponseBody.create(null, "")))
+            detailGate?.await()
+            return items.first { it.id == id }
+        }
+        override suspend fun create(authorization: String, todo: TodoRequestDto): TodoDto {
+            val item = TodoDto("added", todo.title, todo.description, todo.completed, "user", "created", "updated")
+            items.add(item)
             return item
         }
-        override suspend fun create(authorization: String, todo: TodoRequestDto) = item
         override suspend fun update(authorization: String, id: String, todo: TodoRequestDto): TodoDto {
-            item = item.copy(title = todo.title, description = todo.description, completed = todo.completed)
-            return item
+            val index = items.indexOfFirst { it.id == id }
+            val updated = items[index].copy(title = todo.title, description = todo.description, completed = todo.completed)
+            items[index] = updated
+            return updated
         }
-        override suspend fun delete(authorization: String, id: String) {}
+        override suspend fun delete(authorization: String, id: String) { items.removeAll { it.id == id } }
     }
 }

@@ -3,6 +3,7 @@ package com.example.todolistproject.viewmodels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.todolistproject.models.TodoDto
 import com.example.todolistproject.models.TodoRequestDto
 import com.example.todolistproject.repositories.TodoRepository
 
@@ -19,12 +20,12 @@ class AddTodoViewModel(private val repository: TodoRepository, onSessionExpired:
 
     override fun clearOnSessionExpired() = clearFields()
 
-    fun save(token: String, onSuccess: () -> Unit) {
+    fun save(token: String, onSuccess: (TodoDto) -> Unit) {
         if (title.isBlank()) {
             showError("Enter a title.")
             return
         }
         val todo = TodoRequestDto(title.trim(), description.takeUnless { it.isBlank() }, completed)
-        request { repository.create(token, todo); clearFields(); onSuccess() }
+        request { val created = repository.create(token, todo); clearFields(); onSuccess(created) }
     }
 }

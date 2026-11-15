@@ -10,7 +10,7 @@ import com.example.todolistproject.models.TodoDto
 import com.example.todolistproject.viewmodels.EditTodoViewModel
 
 @Composable
-fun EditTodoView(model: EditTodoViewModel, token: String, todo: TodoDto, onBack: () -> Unit, onSaved: () -> Unit) {
+fun EditTodoView(model: EditTodoViewModel, token: String, todo: TodoDto, onBack: () -> Unit, onSaved: (TodoDto) -> Unit) {
     LaunchedEffect(todo.id) { model.initialize(todo); model.clearError() }
     BackHandler { if (!model.loading) { model.clearFields(); onBack() } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

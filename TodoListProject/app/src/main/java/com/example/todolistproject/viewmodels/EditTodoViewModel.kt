@@ -30,12 +30,12 @@ class EditTodoViewModel(private val repository: TodoRepository, onSessionExpired
 
     override fun clearOnSessionExpired() = clearFields()
 
-    fun save(token: String, id: String, onSuccess: () -> Unit) {
+    fun save(token: String, id: String, onSuccess: (TodoDto) -> Unit) {
         if (title.isBlank()) {
             showError("Enter a title.")
             return
         }
         val todo = TodoRequestDto(title.trim(), description.takeUnless { it.isBlank() }, completed)
-        request { repository.update(token, id, todo); clearFields(); onSuccess() }
+        request { val updated = repository.update(token, id, todo); clearFields(); onSuccess(updated) }
     }
 }

@@ -21,5 +21,7 @@ class TodoListViewModel(private val repository: TodoRepository, onSessionExpired
         loadedSession = sessionVersion
         request { todos = repository.todos(token) }
     }
-    fun clear() { todos = emptyList(); loadedSession = null; clearError() }
+    fun add(todo: TodoDto) { todos = todos + todo }
+    fun update(todo: TodoDto) { todos = todos.map { if (it.id == todo.id) todo else it } }
+    fun remove(id: String) { todos = todos.filterNot { it.id == id } }
 }

@@ -15,6 +15,7 @@ A simple Jetpack Compose app using MVVM, a repository, Retrofit, and the backend
 1. Set up and run the backend as described in its `docs/api.md` (PostgreSQL, migrations, and `pnpm dev`).
 2. Open this project in Android Studio and run the debug app on an Android emulator. The default API address is `http://10.0.2.2:3000/`, which reaches the development server on the emulator's host computer.
 3. Register with an email and a password of at least 9 characters, or log in with an existing account. Open a todo to see its details, edit or delete it; use **Add todo** to create one.
+After a successful add, edit, or delete, the previous screen shows the server's result immediately and refreshes in the background.
 
 For a physical device, start the backend on an address reachable from the device, connect both to the same network, and supply the computer's LAN address when building, including the trailing slash:
 

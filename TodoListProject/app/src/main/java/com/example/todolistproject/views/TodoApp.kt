@@ -1,5 +1,7 @@
 package com.example.todolistproject.views
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -49,7 +52,14 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Todo List", style = MaterialTheme.typography.headlineMedium)
-            NavHost(navController = navController, startDestination = LoginDestination) {
+            NavHost(
+                navController = navController,
+                startDestination = LoginDestination,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None }
+            ) {
                 composable<LoginDestination> {
                     val viewModel: LoginViewModel = viewModel(factory = viewModelFactory { initializer { LoginViewModel(app.authRepository) } })
                     LoginView(viewModel, app.loginMessage,
@@ -87,10 +97,14 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
                         val viewModel: TodoDetailViewModel = viewModel(factory = viewModelFactory {
                             initializer { TodoDetailViewModel(app.todoRepository) { app.logout(expired = true) } }
                         })
-                        TodoDetailView(viewModel, token, entry.toRoute<TodoDetailDestination>().id,
+                        val id = entry.toRoute<TodoDetailDestination>().id
+                        TodoDetailView(viewModel, token, id,
                             onBack = { navController.popBackStack() },
                             onEdit = { app.select(it); navController.navigate(EditTodoDestination) },
-                            onDeleted = { navController.popBackStack<TodoListDestination>(inclusive = false) })
+                            onDeleted = {
+                                ViewModelProvider(navController.getBackStackEntry<TodoListDestination>())[TodoListViewModel::class.java].remove(id)
+                                navController.popBackStack<TodoListDestination>(inclusive = false)
+                            })
                     }
                 }
                 composable<AddTodoDestination> {
@@ -98,7 +112,10 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
                         val viewModel: AddTodoViewModel = viewModel(factory = viewModelFactory {
                             initializer { AddTodoViewModel(app.todoRepository) { app.logout(expired = true) } }
                         })
-                        AddTodoView(viewModel, token, onBack = { navController.popBackStack() })
+                        AddTodoView(viewModel, token, onBack = { navController.popBackStack() }, onSaved = { todo ->
+                            ViewModelProvider(navController.getBackStackEntry<TodoListDestination>())[TodoListViewModel::class.java].add(todo)
+                            navController.popBackStack()
+                        })
                     }
                 }
                 composable<EditTodoDestination> {
@@ -108,7 +125,11 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
                                 initializer { EditTodoViewModel(app.todoRepository) { app.logout(expired = true) } }
                             })
                             EditTodoView(viewModel, token, todo, onBack = { navController.popBackStack() },
-                                onSaved = { navController.popBackStack() })
+                                onSaved = { updated ->
+                                    ViewModelProvider(navController.getBackStackEntry<TodoListDestination>())[TodoListViewModel::class.java].update(updated)
+                                    ViewModelProvider(navController.getBackStackEntry<TodoDetailDestination>())[TodoDetailViewModel::class.java].update(updated)
+                                    navController.popBackStack()
+                                })
                         }
                     }
                 }

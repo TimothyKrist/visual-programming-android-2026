@@ -26,7 +26,7 @@ import com.example.todolistproject.viewmodels.TodoListViewModel
 @Composable
 fun TodoListView(model: TodoListViewModel, token: String, sessionVersion: Int, onAdd: () -> Unit, onOpen: (TodoDto) -> Unit, onLogout: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (!model.loading) { model.clear(); model.load(token, sessionVersion) }
+        model.load(token, sessionVersion)
     }
     BackHandler(enabled = model.loading) {}
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
