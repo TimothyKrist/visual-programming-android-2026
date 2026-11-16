@@ -10,8 +10,7 @@ import com.example.todolistproject.viewmodels.RequestViewModel
 
 @Composable
 fun RequestStatus(model: RequestViewModel, message: String? = null) {
-    val error by model.error.collectAsStateWithLifecycle()
-    val loading by model.loading.collectAsStateWithLifecycle()
-    (error ?: message)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    if (loading) CircularProgressIndicator()
+    val state by model.requestState.collectAsStateWithLifecycle()
+    (state.error ?: message)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    if (state.loading) CircularProgressIndicator()
 }

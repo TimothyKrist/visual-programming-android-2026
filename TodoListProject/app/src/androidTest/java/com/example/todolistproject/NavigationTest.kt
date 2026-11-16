@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -185,8 +189,38 @@ class NavigationTest {
         click("Log out")
         compose.onNodeWithText("Need an account? Register").assertIsDisplayed()
         compose.runOnIdle {
-            assertNull(AppViewModel(AuthRepository(api), TodoRepository(api), preferences).token.value)
+            assertNull(AppViewModel(AuthRepository(api), TodoRepository(api), preferences).uiState.value.token)
         }
+    }
+
+    @Test fun logoutAndLoginDoNotRetainPriorFormOrDetailState() {
+        start()
+        fillAuth()
+        click("Log in")
+        click("Task")
+        click("Edit")
+        compose.onNodeWithText("Title").performTextClearance()
+        compose.onNodeWithText("Title").performTextInput("Private draft")
+        compose.onNodeWithText("Description (optional)").performTextInput("Private details")
+        compose.runOnIdle {
+            nav.popBackStack<TodoListDestination>(inclusive = false)
+        }
+        click("Log out")
+        compose.onNodeWithText("Need an account? Register").assertIsDisplayed()
+
+        fillAuth()
+        click("Log in")
+        compose.onNodeWithText("Task").assertIsDisplayed()
+        click("Add todo")
+        compose.onNodeWithText("Title").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        compose.onNodeWithText("Description (optional)").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        back()
+        click("Task")
+        compose.onNodeWithText("Task").assertIsDisplayed()
+        compose.onNodeWithText("Private draft").assertDoesNotExist()
+        click("Edit")
+        compose.onNodeWithText("Title").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("Task")))
+        compose.onNodeWithText("Description (optional)").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
 

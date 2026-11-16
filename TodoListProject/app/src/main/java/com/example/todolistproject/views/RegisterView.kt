@@ -12,14 +12,13 @@ import com.example.todolistproject.viewmodels.AuthViewModel
 
 @Composable
 fun RegisterView(model: AuthViewModel, onRegister: () -> Unit, onLogin: () -> Unit) {
-    val loading by model.loading.collectAsStateWithLifecycle()
-    val email by model.email.collectAsStateWithLifecycle()
-    val password by model.password.collectAsStateWithLifecycle()
+    val state by model.uiState.collectAsStateWithLifecycle()
+    val requestState by model.requestState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { model.clearError() }
-    BackHandler { if (!loading) { model.clearFields(); onLogin() } }
+    BackHandler { if (!requestState.loading) { model.clearFields(); onLogin() } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         RequestStatus(model)
-        AuthFields(register = true, enabled = !loading, email = email, onEmailChange = model::setEmail,
-            password = password, onPasswordChange = model::setPassword, onSubmit = onRegister, onSwitch = { model.clearFields(); onLogin() })
+        AuthFields(register = true, enabled = !requestState.loading, email = state.email, onEmailChange = model::setEmail,
+            password = state.password, onPasswordChange = model::setPassword, onSubmit = onRegister, onSwitch = { model.clearFields(); onLogin() })
     }
 }

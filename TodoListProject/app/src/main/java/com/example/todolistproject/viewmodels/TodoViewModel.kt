@@ -3,88 +3,87 @@ package com.example.todolistproject.viewmodels
 import com.example.todolistproject.models.TodoDto
 import com.example.todolistproject.models.TodoRequestDto
 import com.example.todolistproject.repositories.TodoRepository
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+data class TodoUiState(
+    val todos: List<TodoDto> = emptyList(),
+    val loadedSession: Int? = null,
+    val todo: TodoDto? = null,
+    val confirmDelete: Boolean = false,
+    val title: String = "",
+    val description: String = "",
+    val completed: Boolean = false
+)
 
 class TodoViewModel(private val repository: TodoRepository, onSessionExpired: () -> Unit) : RequestViewModel(onSessionExpired) {
-    private val _todos = MutableStateFlow<List<TodoDto>>(emptyList())
-    val todos = _todos.asStateFlow()
-    private val _loadedSession = MutableStateFlow<Int?>(null)
-    val loadedSession = _loadedSession.asStateFlow()
-    private val _todo = MutableStateFlow<TodoDto?>(null)
-    val todo = _todo.asStateFlow()
-    private val _confirmDelete = MutableStateFlow(false)
-    val confirmDelete = _confirmDelete.asStateFlow()
-    private val _title = MutableStateFlow("")
-    val title = _title.asStateFlow()
-    private val _description = MutableStateFlow("")
-    val description = _description.asStateFlow()
-    private val _completed = MutableStateFlow(false)
-    val completed = _completed.asStateFlow()
+    private val _uiState = MutableStateFlow(TodoUiState())
+    val uiState = _uiState.asStateFlow()
     private var editingId: String? = null
-    private var loadedId: String? = null
 
-    fun setTitle(value: String) { _title.value = value }
-    fun setDescription(value: String) { _description.value = value }
-    fun setCompleted(value: Boolean) { _completed.value = value }
-    fun setConfirmDelete(value: Boolean) { _confirmDelete.value = value }
+    fun setTitle(value: String) { _uiState.update { it.copy(title = value) } }
+    fun setDescription(value: String) { _uiState.update { it.copy(description = value) } }
+    fun setCompleted(value: Boolean) { _uiState.update { it.copy(completed = value) } }
+    fun setConfirmDelete(value: Boolean) { _uiState.update { it.copy(confirmDelete = value) } }
 
-    override fun clearOnSessionExpired() {
-        _todos.value = emptyList()
-        _loadedSession.value = null
-        _todo.value = null
-        loadedId = null
-        _confirmDelete.value = false
-        clearFields()
+    fun clearSession() {
+        resetRequest()
+        editingId = null
+        _uiState.value = TodoUiState()
     }
 
+    override fun clearOnSessionExpired() = clearSession()
+
     fun load(token: String, sessionVersion: Int) {
-        if (loading.value) return
-        if (_loadedSession.value != sessionVersion) clearOnSessionExpired()
-        _loadedSession.value = sessionVersion
-        request { _todos.value = repository.todos(token) }
+        if (_uiState.value.loadedSession != sessionVersion) clearSession()
+        if (requestState.value.loading) return
+        _uiState.update { it.copy(loadedSession = sessionVersion) }
+        request {
+            val todos = repository.todos(token)
+            currentCoroutineContext().ensureActive()
+            _uiState.update { it.copy(todos = todos) }
+        }
     }
 
     fun load(token: String, id: String) {
-        if (loading.value) return
-        if (loadedId != id) {
-            _confirmDelete.value = false
-            _todo.value = null
+        if (requestState.value.loading) return
+        if (_uiState.value.todo?.id != id) _uiState.update { it.copy(confirmDelete = false, todo = null) }
+        request {
+            val todo = repository.todo(token, id)
+            currentCoroutineContext().ensureActive()
+            _uiState.update { it.copy(todo = todo) }
         }
-        loadedId = id
-        request { _todo.value = repository.todo(token, id) }
     }
 
     fun initialize(todo: TodoDto) {
         if (editingId == todo.id) return
         editingId = todo.id
-        _title.value = todo.title
-        _description.value = todo.description ?: ""
-        _completed.value = todo.completed
+        _uiState.update { it.copy(title = todo.title, description = todo.description ?: "", completed = todo.completed) }
     }
 
     fun clearFields() {
-        _title.value = ""
-        _description.value = ""
-        _completed.value = false
         editingId = null
+        _uiState.update { it.copy(title = "", description = "", completed = false) }
     }
 
     fun save(token: String, onSuccess: (TodoDto) -> Unit) = save(token, null, onSuccess)
 
     fun save(token: String, id: String?, onSuccess: (TodoDto) -> Unit) {
-        if (_title.value.isBlank()) {
+        val state = _uiState.value
+        if (state.title.isBlank()) {
             showError("Enter a title.")
             return
         }
-        val input = TodoRequestDto(_title.value.trim(), _description.value.takeUnless { it.isBlank() }, _completed.value)
+        val input = TodoRequestDto(state.title.trim(), state.description.takeUnless { it.isBlank() }, state.completed)
         request {
             val saved = if (id == null) repository.create(token, input) else repository.update(token, id, input)
-            if (id == null) {
-                _todos.value = _todos.value + saved
-            } else {
-                _todos.value = _todos.value.map { if (it.id == saved.id) saved else it }
-                _todo.value = saved
+            currentCoroutineContext().ensureActive()
+            _uiState.update { state ->
+                if (id == null) state.copy(todos = state.todos + saved)
+                else state.copy(todos = state.todos.map { if (it.id == saved.id) saved else it }, todo = saved)
             }
             clearFields()
             onSuccess(saved)
@@ -93,9 +92,14 @@ class TodoViewModel(private val repository: TodoRepository, onSessionExpired: ()
 
     fun delete(token: String, id: String, onSuccess: () -> Unit) = request {
         repository.delete(token, id)
-        _todos.value = _todos.value.filterNot { it.id == id }
-        if (_todo.value?.id == id) _todo.value = null
-        _confirmDelete.value = false
+        currentCoroutineContext().ensureActive()
+        _uiState.update { state ->
+            state.copy(
+                todos = state.todos.filterNot { it.id == id },
+                todo = state.todo?.takeUnless { it.id == id },
+                confirmDelete = false
+            )
+        }
         onSuccess()
     }
 }

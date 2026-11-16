@@ -14,26 +14,34 @@ import com.example.todolistproject.services.TodoService
 import com.example.todolistproject.services.createRetrofit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+data class AppUiState(
+    val token: String? = null,
+    val sessionVersion: Int = 0
+)
 
 class AppViewModel(
     val authRepository: AuthRepository,
     val todoRepository: TodoRepository,
     private val preferences: SharedPreferences
 ) : ViewModel() {
-    private val _token = MutableStateFlow(preferences.getString("access_token", null))
-    val token = _token.asStateFlow()
-    private val _sessionVersion = MutableStateFlow(preferences.getInt("session_version", 0))
-    val sessionVersion = _sessionVersion.asStateFlow()
+    private val _uiState = MutableStateFlow(
+        AppUiState(
+            token = preferences.getString("access_token", null),
+            sessionVersion = preferences.getInt("session_version", 0)
+        )
+    )
+    val uiState = _uiState.asStateFlow()
 
     fun setSession(accessToken: String) {
-        val version = _sessionVersion.value + 1
+        val version = _uiState.value.sessionVersion + 1
         preferences.edit().putString("access_token", accessToken).putInt("session_version", version).apply()
-        _token.value = accessToken
-        _sessionVersion.value = version
+        _uiState.value = AppUiState(token = accessToken, sessionVersion = version)
     }
     fun clearSession() {
         preferences.edit().remove("access_token").apply()
-        _token.value = null
+        _uiState.update { it.copy(token = null) }
     }
 
     companion object {

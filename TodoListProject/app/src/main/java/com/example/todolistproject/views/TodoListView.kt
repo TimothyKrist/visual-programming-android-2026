@@ -27,26 +27,24 @@ import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
 fun TodoListView(model: TodoViewModel, token: String, sessionVersion: Int, onAdd: () -> Unit, onOpen: (TodoDto) -> Unit, onLogout: () -> Unit) {
-    val loading by model.loading.collectAsStateWithLifecycle()
-    val error by model.error.collectAsStateWithLifecycle()
-    val todos by model.todos.collectAsStateWithLifecycle()
-    val loadedSession by model.loadedSession.collectAsStateWithLifecycle()
-    val isCurrentSession = loadedSession == sessionVersion
+    val state by model.uiState.collectAsStateWithLifecycle()
+    val request by model.requestState.collectAsStateWithLifecycle()
+    val isCurrentSession = state.loadedSession == sessionVersion
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         model.load(token, sessionVersion)
     }
-    BackHandler(enabled = loading) {}
+    BackHandler(enabled = request.loading) {}
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (isCurrentSession) RequestStatus(model)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onAdd, enabled = !loading && isCurrentSession) { Text("Add todo") }
-            OutlinedButton(onClick = { model.load(token, sessionVersion) }, enabled = !loading && isCurrentSession) { Text("Refresh") }
-            TextButton(onClick = onLogout, enabled = !loading && isCurrentSession) { Text("Log out") }
+            Button(onClick = onAdd, enabled = !request.loading && isCurrentSession) { Text("Add todo") }
+            OutlinedButton(onClick = { model.load(token, sessionVersion) }, enabled = !request.loading && isCurrentSession) { Text("Refresh") }
+            TextButton(onClick = onLogout, enabled = !request.loading && isCurrentSession) { Text("Log out") }
         }
-        if (isCurrentSession && todos.isEmpty() && !loading && error == null) Text("No todos yet.")
+        if (isCurrentSession && state.todos.isEmpty() && !request.loading && request.error == null) Text("No todos yet.")
         LazyColumn {
-            items(if (isCurrentSession) todos else emptyList(), key = { it.id }) { todo ->
-                Column(Modifier.fillMaxWidth().clickable(enabled = !loading && isCurrentSession) { onOpen(todo) }.padding(vertical = 14.dp)) {
+            items(if (isCurrentSession) state.todos else emptyList(), key = { it.id }) { todo ->
+                Column(Modifier.fillMaxWidth().clickable(enabled = !request.loading && isCurrentSession) { onOpen(todo) }.padding(vertical = 14.dp)) {
                     Text(todo.title, style = MaterialTheme.typography.titleMedium)
                     Text(if (todo.completed) "Completed" else "Not completed")
                 }

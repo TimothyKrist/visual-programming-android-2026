@@ -2,35 +2,41 @@ package com.example.todolistproject.viewmodels
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+data class AuthUiState(
+    val email: String = "",
+    val password: String = "",
+    val loginMessage: String? = null
+)
 
 class AuthViewModel(private val app: AppViewModel) : RequestViewModel() {
-    private val _email = MutableStateFlow("")
-    val email = _email.asStateFlow()
-    private val _password = MutableStateFlow("")
-    val password = _password.asStateFlow()
-    private val _loginMessage = MutableStateFlow<String?>(null)
-    val loginMessage = _loginMessage.asStateFlow()
+    private val _uiState = MutableStateFlow(AuthUiState())
+    val uiState = _uiState.asStateFlow()
 
-    fun setEmail(value: String) { _email.value = value }
-    fun setPassword(value: String) { _password.value = value }
-    fun clearFields() { _email.value = ""; _password.value = "" }
-    fun clearLoginMessage() { _loginMessage.value = null }
+    fun setEmail(value: String) { _uiState.update { it.copy(email = value) } }
+    fun setPassword(value: String) { _uiState.update { it.copy(password = value) } }
+    fun clearFields() { _uiState.update { it.copy(email = "", password = "") } }
+    fun clearLoginMessage() { _uiState.update { it.copy(loginMessage = null) } }
 
     fun logout(expired: Boolean = false) {
         clearFields()
         clearError()
-        _loginMessage.value = if (expired) "Your session expired. Please log in again." else null
+        _uiState.update {
+            it.copy(loginMessage = if (expired) "Your session expired. Please log in again." else null)
+        }
         app.clearSession()
     }
 
     fun login(onSuccess: () -> Unit) {
         clearLoginMessage()
-        if (_email.value.isBlank() || _password.value.isEmpty()) {
+        val state = _uiState.value
+        if (state.email.isBlank() || state.password.isEmpty()) {
             showError("Enter your email and password.")
             return
         }
         request {
-            val token = app.authRepository.login(_email.value, _password.value).accessToken
+            val token = app.authRepository.login(state.email, state.password).accessToken
             app.setSession(token)
             clearFields()
             onSuccess()
@@ -39,16 +45,17 @@ class AuthViewModel(private val app: AppViewModel) : RequestViewModel() {
 
     fun register(onSuccess: () -> Unit) {
         clearLoginMessage()
-        if (_email.value.isBlank() || _password.value.isEmpty()) {
+        val state = _uiState.value
+        if (state.email.isBlank() || state.password.isEmpty()) {
             showError("Enter your email and password.")
             return
         }
-        if (_password.value.length < 9) {
+        if (state.password.length < 9) {
             showError("Registration passwords must be at least 9 characters.")
             return
         }
         request {
-            val token = app.authRepository.register(_email.value, _password.value).accessToken
+            val token = app.authRepository.register(state.email, state.password).accessToken
             app.setSession(token)
             clearFields()
             onSuccess()

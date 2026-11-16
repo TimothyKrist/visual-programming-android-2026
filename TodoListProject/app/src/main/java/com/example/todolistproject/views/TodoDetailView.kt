@@ -24,12 +24,11 @@ import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
 fun TodoDetailView(model: TodoViewModel, token: String, id: String, onBack: () -> Unit, onEdit: (TodoDto) -> Unit, onDeleted: () -> Unit) {
-    val loading by model.loading.collectAsStateWithLifecycle()
-    val selectedTodo by model.todo.collectAsStateWithLifecycle()
-    val confirmDelete by model.confirmDelete.collectAsStateWithLifecycle()
-    val currentTodo = selectedTodo?.takeIf { it.id == id }
+    val state by model.uiState.collectAsStateWithLifecycle()
+    val request by model.requestState.collectAsStateWithLifecycle()
+    val currentTodo = state.todo?.takeIf { it.id == id }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.load(token, id) }
-    BackHandler { if (!loading) onBack() }
+    BackHandler { if (!request.loading) onBack() }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         RequestStatus(model)
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -41,16 +40,16 @@ fun TodoDetailView(model: TodoViewModel, token: String, id: String, onBack: () -
                 Text("Updated: ${todo.updatedAt}")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onBack, enabled = !loading) { Text("Back") }
+                OutlinedButton(onClick = onBack, enabled = !request.loading) { Text("Back") }
                 if (currentTodo == null) {
-                    OutlinedButton(onClick = { model.load(token, id) }, enabled = !loading) { Text("Retry") }
+                    OutlinedButton(onClick = { model.load(token, id) }, enabled = !request.loading) { Text("Retry") }
                 } else {
-                    Button(onClick = { currentTodo.let(onEdit) }, enabled = !loading) { Text("Edit") }
-                    OutlinedButton(onClick = { model.setConfirmDelete(true) }, enabled = !loading) { Text("Delete") }
+                    Button(onClick = { currentTodo.let(onEdit) }, enabled = !request.loading) { Text("Edit") }
+                    OutlinedButton(onClick = { model.setConfirmDelete(true) }, enabled = !request.loading) { Text("Delete") }
                 }
             }
         }
-        if (confirmDelete) AlertDialog(
+        if (state.confirmDelete) AlertDialog(
             onDismissRequest = { model.setConfirmDelete(false) },
             title = { Text("Delete todo?") },
             text = { Text("This cannot be undone.") },

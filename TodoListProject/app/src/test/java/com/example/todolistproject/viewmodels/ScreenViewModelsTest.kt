@@ -12,6 +12,9 @@ import com.example.todolistproject.services.TodoService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -55,25 +58,25 @@ class ScreenViewModelsTest {
         var completed = false
         model.setPassword("password")
         model.login { completed = true }
-        assertEquals("Enter your email and password.", model.error.value)
+        assertEquals("Enter your email and password.", model.requestState.value.error)
         model.setEmail("a@example.com")
         model.setPassword("short")
         model.register { completed = true }
-        assertEquals("Registration passwords must be at least 9 characters.", model.error.value)
+        assertEquals("Registration passwords must be at least 9 characters.", model.requestState.value.error)
         assertEquals(0, api.calls)
         assertFalse(completed)
-        assertNull(app.token.value)
+        assertNull(app.uiState.value.token)
 
         model.setEmail(" a@example.com ")
         model.setPassword("password")
-        model.login { assertEquals("login-token", app.token.value); completed = true }
+        model.login { assertEquals("login-token", app.uiState.value.token); completed = true }
         assertTrue(completed)
-        assertEquals(1, app.sessionVersion.value)
+        assertEquals(1, app.uiState.value.sessionVersion)
         assertEquals("a@example.com", api.credentials?.email)
         model.setEmail("a@example.com")
         model.setPassword("password123")
-        model.register { assertEquals("register-token", app.token.value) }
-        assertEquals(2, app.sessionVersion.value)
+        model.register { assertEquals("register-token", app.uiState.value.token) }
+        assertEquals(2, app.uiState.value.sessionVersion)
         assertEquals(2, api.calls)
     }
 
@@ -83,32 +86,32 @@ class ScreenViewModelsTest {
         model.setEmail("draft@example.com")
         model.setPassword("draft")
         model.logout(expired = true)
-        assertNull(app.token.value)
-        assertEquals("Your session expired. Please log in again.", model.loginMessage.value)
-        assertEquals("", model.email.value)
-        assertEquals("", model.password.value)
+        assertNull(app.uiState.value.token)
+        assertEquals("Your session expired. Please log in again.", model.uiState.value.loginMessage)
+        assertEquals("", model.uiState.value.email)
+        assertEquals("", model.uiState.value.password)
 
         model.login {}
-        assertNull(model.loginMessage.value)
-        assertEquals("Enter your email and password.", model.error.value)
+        assertNull(model.uiState.value.loginMessage)
+        assertEquals("Enter your email and password.", model.requestState.value.error)
 
         app.setSession("new-token")
         model.logout()
-        assertNull(app.token.value)
-        assertNull(model.loginMessage.value)
-        assertNull(model.error.value)
-        assertEquals(2, app.sessionVersion.value)
+        assertNull(app.uiState.value.token)
+        assertNull(model.uiState.value.loginMessage)
+        assertNull(model.requestState.value.error)
+        assertEquals(2, app.uiState.value.sessionVersion)
     }
     @Test fun `new app instance restores the latest token and session version`() {
         app.setSession("first-token")
         val restored = AppViewModel(auth, todos, preferences)
-        assertEquals("first-token", restored.token.value)
-        assertEquals(1, restored.sessionVersion.value)
+        assertEquals("first-token", restored.uiState.value.token)
+        assertEquals(1, restored.uiState.value.sessionVersion)
 
         restored.setSession("second-token")
         val reopened = AppViewModel(auth, todos, preferences)
-        assertEquals("second-token", reopened.token.value)
-        assertEquals(2, reopened.sessionVersion.value)
+        assertEquals("second-token", reopened.uiState.value.token)
+        assertEquals(2, reopened.uiState.value.sessionVersion)
     }
 
     @Test fun `logout and expiry remove persisted credentials`() {
@@ -116,8 +119,8 @@ class ScreenViewModelsTest {
             app.setSession("token")
             AuthViewModel(app).logout(expired)
             val restored = AppViewModel(auth, todos, preferences)
-            assertNull(restored.token.value)
-            assertEquals(app.sessionVersion.value, restored.sessionVersion.value)
+            assertNull(restored.uiState.value.token)
+            assertEquals(app.uiState.value.sessionVersion, restored.uiState.value.sessionVersion)
         }
     }
 
@@ -126,29 +129,29 @@ class ScreenViewModelsTest {
         val model = TodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
         var completed = false
         model.load("token", 1)
-        assertEquals(listOf(api.todo), model.todos.value)
+        assertEquals(listOf(api.todo), model.uiState.value.todos)
         model.load("token", "id")
-        assertEquals(api.todo, model.todo.value)
+        assertEquals(api.todo, model.uiState.value.todo)
         model.setTitle("  ")
         model.save("token") { completed = true }
-        assertEquals("Enter a title.", model.error.value)
+        assertEquals("Enter a title.", model.requestState.value.error)
         assertFalse(completed)
         model.setTitle(" Task ")
         model.save("token") { created ->
-            assertEquals(listOf(api.todo, created), model.todos.value)
+            assertEquals(listOf(api.todo, created), model.uiState.value.todos)
             completed = true
         }
         assertTrue(completed)
         assertEquals(TodoRequestDto("Task", null, false), api.request)
-        assertEquals("", model.title.value)
+        assertEquals("", model.uiState.value.title)
         completed = false
         model.initialize(api.todo)
         model.setTitle("Changed")
         model.setDescription("Details")
         model.setCompleted(true)
         model.save("token", "id") { updated ->
-            assertEquals(updated, model.todo.value)
-            assertEquals(updated, model.todos.value.first())
+            assertEquals(updated, model.uiState.value.todo)
+            assertEquals(updated, model.uiState.value.todos.first())
             assertEquals("Changed", updated.title)
             completed = true
         }
@@ -156,8 +159,8 @@ class ScreenViewModelsTest {
         assertEquals(TodoRequestDto("Changed", "Details", true), api.request)
         completed = false
         model.delete("token", "id") {
-            assertNull(model.todo.value)
-            assertFalse(model.todos.value.any { it.id == "id" })
+            assertNull(model.uiState.value.todo)
+            assertFalse(model.uiState.value.todos.any { it.id == "id" })
             completed = true
         }
         assertTrue(completed)
@@ -167,15 +170,15 @@ class ScreenViewModelsTest {
     @Test fun `form state survives initialization and clears on success or session expiry`() {
         val edit = TodoViewModel(todos) {}
         edit.initialize(api.todo)
-        assertEquals("Task", edit.title.value)
+        assertEquals("Task", edit.uiState.value.title)
         edit.setTitle("Draft")
         edit.initialize(api.todo)
-        assertEquals("Draft", edit.title.value)
+        assertEquals("Draft", edit.uiState.value.title)
         edit.initialize(api.todo.copy(id = "other", title = "Other"))
-        assertEquals("Other", edit.title.value)
+        assertEquals("Other", edit.uiState.value.title)
         edit.clearFields()
         edit.initialize(api.todo)
-        assertEquals("Task", edit.title.value)
+        assertEquals("Task", edit.uiState.value.title)
 
         val add = edit
         add.load("token", 1)
@@ -183,35 +186,90 @@ class ScreenViewModelsTest {
         add.setTitle("Draft")
         api.unauthorized = true
         add.save("expired") {}
-        assertEquals("", add.title.value)
-        assertEquals("", add.description.value)
-        assertFalse(add.completed.value)
-        assertTrue(add.todos.value.isEmpty())
-        assertNull(add.todo.value)
-        assertNull(add.loadedSession.value)
-        assertFalse(add.confirmDelete.value)
+        assertEquals("", add.uiState.value.title)
+        assertEquals("", add.uiState.value.description)
+        assertFalse(add.uiState.value.completed)
+        assertTrue(add.uiState.value.todos.isEmpty())
+        assertNull(add.uiState.value.todo)
+        assertNull(add.uiState.value.loadedSession)
+        assertFalse(add.uiState.value.confirmDelete)
         api.unauthorized = false
         val login = AuthViewModel(app)
         login.setEmail("a@example.com")
         login.setPassword("password")
         login.login() {}
-        assertEquals("", login.email.value)
-        assertEquals("", login.password.value)
+        assertEquals("", login.uiState.value.email)
+        assertEquals("", login.uiState.value.password)
     }
 
-    @Test fun `a pending list request cannot be relabeled as another session`() {
-        val gate = CompletableDeferred<Unit>()
-        api.listGate = gate
-        val list = TodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
-        list.load("first", 1)
-        assertTrue(list.loading.value)
-        list.load("second", 2)
-        assertEquals(1, list.loadedSession.value)
-        gate.complete(Unit)
-        assertFalse(list.loading.value)
-        list.load("second", 2)
-        assertEquals(2, list.loadedSession.value)
+    @Test fun `new session replaces a pending list request without exposing stale data`() {
+        val first = FakeApi.ListResponse(listOf(api.todo))
+        val secondTodo = api.todo.copy(id = "second", title = "Second user's task", userId = "second-user")
+        val second = FakeApi.ListResponse(listOf(secondTodo))
+        api.listResponses["Bearer first"] = first
+        api.listResponses["Bearer second"] = second
+        val model = TodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
+
+        model.load("first", 1)
+        assertTrue(model.requestState.value.loading)
+        model.load("second", 2)
+        assertTrue(first.cancelled)
+        assertEquals(2, model.uiState.value.loadedSession)
+        assertTrue(model.uiState.value.todos.isEmpty())
         assertEquals("Bearer second", api.authorization)
+        assertTrue(model.requestState.value.loading)
+
+        first.gate.complete(Unit)
+        assertTrue(model.uiState.value.todos.isEmpty())
+        assertTrue(model.requestState.value.loading)
+        second.gate.complete(Unit)
+        assertEquals(listOf(secondTodo), model.uiState.value.todos)
+        assertFalse(model.requestState.value.loading)
+        assertNull(model.requestState.value.error)
+    }
+
+    @Test fun `clearSession resets all state and cancels pending data without repopulating it`() {
+        val model = TodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
+        fun populateSession() {
+            model.load("first", 1)
+            model.load("first", "id")
+            model.initialize(api.todo)
+            model.setTitle("")
+            model.save("first") { throw AssertionError("Invalid form must not save") }
+            model.setTitle("Private draft")
+            model.setDescription("Private details")
+            model.setCompleted(true)
+            model.setConfirmDelete(true)
+        }
+
+        populateSession()
+        assertEquals(listOf(api.todo), model.uiState.value.todos)
+        assertEquals(api.todo, model.uiState.value.todo)
+        assertEquals("Enter a title.", model.requestState.value.error)
+        model.clearSession()
+        assertEquals(TodoUiState(), model.uiState.value)
+        assertEquals(RequestUiState(), model.requestState.value)
+
+        populateSession()
+        val pending = FakeApi.ListResponse(listOf(api.todo))
+        api.listResponses["Bearer first"] = pending
+        model.load("first", 1)
+        assertTrue(model.requestState.value.loading)
+        assertEquals("Private draft", model.uiState.value.title)
+        assertEquals("Private details", model.uiState.value.description)
+        assertTrue(model.uiState.value.completed)
+        assertTrue(model.uiState.value.confirmDelete)
+        model.clearSession()
+        assertTrue(pending.cancelled)
+        assertEquals(TodoUiState(), model.uiState.value)
+        assertEquals(RequestUiState(), model.requestState.value)
+
+        pending.gate.complete(Unit)
+        assertEquals(TodoUiState(), model.uiState.value)
+        assertEquals(RequestUiState(), model.requestState.value)
+
+        model.initialize(api.todo)
+        assertEquals("Task", model.uiState.value.title)
     }
 
     @Test fun `collectors observe pending list request and completion`() = runTest {
@@ -221,10 +279,10 @@ class ScreenViewModelsTest {
         val loadingStates = mutableListOf<Boolean>()
         val listStates = mutableListOf<List<TodoDto>>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            model.loading.collect { loadingStates.add(it) }
+            model.requestState.map { it.loading }.distinctUntilChanged().collect { loadingStates.add(it) }
         }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            model.todos.collect { listStates.add(it) }
+            model.uiState.map { it.todos }.distinctUntilChanged().collect { listStates.add(it) }
         }
 
         model.load("token", 1)
@@ -244,24 +302,29 @@ class ScreenViewModelsTest {
         login.setPassword("wrong")
         login.login() { authenticated = true }
         assertFalse(authenticated)
-        assertEquals("Invalid email or password", login.error.value)
+        assertEquals("Invalid email or password", login.requestState.value.error)
         app.setSession("previous-session")
         val list = TodoViewModel(todos) { login.logout(expired = true) }
         api.unauthorized = false
         list.load("previous-session", 1)
-        assertEquals(listOf(api.todo), list.todos.value)
+        assertEquals(listOf(api.todo), list.uiState.value.todos)
         api.unauthorized = true
         list.load("expired", 2)
-        assertTrue(list.todos.value.isEmpty())
-        assertNull(app.token.value)
-        assertEquals("Your session expired. Please log in again.", login.loginMessage.value)
-        assertNull(list.error.value)
-        assertFalse(list.loading.value)
+        assertTrue(list.uiState.value.todos.isEmpty())
+        assertNull(app.uiState.value.token)
+        assertEquals("Your session expired. Please log in again.", login.uiState.value.loginMessage)
+        assertNull(list.requestState.value.error)
+        assertFalse(list.requestState.value.loading)
     }
 
     private class FakeApi : AuthService, TodoService {
         var calls = 0
         var listGate: CompletableDeferred<Unit>? = null
+        val listResponses = mutableMapOf<String, ListResponse>()
+        class ListResponse(val todos: List<TodoDto>) {
+            val gate = CompletableDeferred<Unit>()
+            var cancelled = false
+        }
         var unauthorized = false
         var authorization: String? = null
         var credentials: CredentialsDto? = null
@@ -280,7 +343,20 @@ class ScreenViewModelsTest {
             check(); this.credentials = credentials; return AuthResponseDto("register-token")
         }
         override suspend fun todos(authorization: String): List<TodoDto> {
-            check(); this.authorization = authorization; listGate?.await(); return listOf(todo)
+            check()
+            this.authorization = authorization
+            val response = listResponses[authorization]
+            if (response != null) {
+                try {
+                    response.gate.await()
+                } catch (cancelled: CancellationException) {
+                    response.cancelled = true
+                    throw cancelled
+                }
+                return response.todos
+            }
+            listGate?.await()
+            return listOf(todo)
         }
         override suspend fun todo(authorization: String, id: String): TodoDto {
             check(); this.authorization = authorization; assertEquals("id", id); return todo

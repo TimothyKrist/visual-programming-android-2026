@@ -13,17 +13,15 @@ import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
 fun EditTodoView(model: TodoViewModel, token: String, todo: TodoDto, onBack: () -> Unit, onSaved: (TodoDto) -> Unit) {
-    val loading by model.loading.collectAsStateWithLifecycle()
-    val title by model.title.collectAsStateWithLifecycle()
-    val description by model.description.collectAsStateWithLifecycle()
-    val completed by model.completed.collectAsStateWithLifecycle()
+    val state by model.uiState.collectAsStateWithLifecycle()
+    val request by model.requestState.collectAsStateWithLifecycle()
     LaunchedEffect(todo.id) { model.initialize(todo); model.clearError() }
-    BackHandler { if (!loading) { model.clearFields(); onBack() } }
+    BackHandler { if (!request.loading) { model.clearFields(); onBack() } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         RequestStatus(model)
-        TodoFields(editing = true, enabled = !loading, title = title, onTitleChange = model::setTitle,
-            description = description, onDescriptionChange = model::setDescription,
-            completed = completed, onCompletedChange = model::setCompleted,
+        TodoFields(editing = true, enabled = !request.loading, title = state.title, onTitleChange = model::setTitle,
+            description = state.description, onDescriptionChange = model::setDescription,
+            completed = state.completed, onCompletedChange = model::setCompleted,
             onSave = { model.save(token, todo.id, onSaved) }, onCancel = { model.clearFields(); onBack() })
     }
 }
