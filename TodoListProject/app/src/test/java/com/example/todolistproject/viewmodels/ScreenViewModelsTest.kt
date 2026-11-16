@@ -36,62 +36,73 @@ class ScreenViewModelsTest {
     @After fun tearDown() { Dispatchers.resetMain() }
 
     @Test fun `authentication validates input and uses each endpoint`() {
-        val login = LoginViewModel(auth)
-        val register = RegisterViewModel(auth)
+        val model = AuthViewModel(auth)
         var token: String? = null
-        login.password = "password"
-        login.login() { token = it }
-        assertEquals("Enter your email and password.", login.error)
-        register.email = "a@example.com"
-        register.password = "short"
-        register.register() { token = it }
-        assertEquals("Registration passwords must be at least 9 characters.", register.error)
+        model.password = "password"
+        model.login { token = it }
+        assertEquals("Enter your email and password.", model.error)
+        model.email = "a@example.com"
+        model.password = "short"
+        model.register { token = it }
+        assertEquals("Registration passwords must be at least 9 characters.", model.error)
         assertEquals(0, api.calls)
 
-        login.email = " a@example.com "
-        login.login() { token = it }
+        model.email = " a@example.com "
+        model.password = "password"
+        model.login { token = it }
         assertEquals("login-token", token)
         assertEquals("a@example.com", api.credentials?.email)
-        register.password = "password123"
-        register.register() { token = it }
+        model.email = "a@example.com"
+        model.password = "password123"
+        model.register { token = it }
         assertEquals("register-token", token)
         assertEquals(2, api.calls)
     }
 
-    @Test fun `todo view models load create update and delete through repository`() {
-        val list = TodoListViewModel(todos) { throw AssertionError("Unexpected session expiry") }
-        val detail = TodoDetailViewModel(todos) { throw AssertionError("Unexpected session expiry") }
-        val add = AddTodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
-        val edit = EditTodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
+    @Test fun `todo mutations update shared list and detail before success callbacks`() {
+        val model = TodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
         var completed = false
-        list.load("token", 1)
-        assertEquals(listOf(api.todo), list.todos)
-        detail.load("token", "id")
-        assertEquals(api.todo, detail.todo)
-        add.title = "  "
-        add.save("token") { completed = true }
-        assertEquals("Enter a title.", add.error)
+        model.load("token", 1)
+        assertEquals(listOf(api.todo), model.todos)
+        model.load("token", "id")
+        assertEquals(api.todo, model.todo)
+        model.title = "  "
+        model.save("token") { completed = true }
+        assertEquals("Enter a title.", model.error)
         assertFalse(completed)
-        add.title = " Task "
-        add.save("token") { completed = true }
+        model.title = " Task "
+        model.save("token") { created ->
+            assertEquals(listOf(api.todo, created), model.todos)
+            completed = true
+        }
         assertTrue(completed)
         assertEquals(TodoRequestDto("Task", null, false), api.request)
+        assertEquals("", model.title)
         completed = false
-        edit.initialize(api.todo)
-        edit.title = "Changed"
-        edit.description = "Details"
-        edit.completed = true
-        edit.save("token", "id") { completed = true }
+        model.initialize(api.todo)
+        model.title = "Changed"
+        model.description = "Details"
+        model.completed = true
+        model.save("token", "id") { updated ->
+            assertEquals(updated, model.todo)
+            assertEquals(updated, model.todos.first())
+            assertEquals("Changed", updated.title)
+            completed = true
+        }
         assertTrue(completed)
         assertEquals(TodoRequestDto("Changed", "Details", true), api.request)
         completed = false
-        detail.delete("token", "id") { completed = true }
+        model.delete("token", "id") {
+            assertNull(model.todo)
+            assertFalse(model.todos.any { it.id == "id" })
+            completed = true
+        }
         assertTrue(completed)
         assertEquals("Bearer token", api.authorization)
     }
 
     @Test fun `form state survives initialization and clears on success or session expiry`() {
-        val edit = EditTodoViewModel(todos) {}
+        val edit = TodoViewModel(todos) {}
         edit.initialize(api.todo)
         assertEquals("Task", edit.title)
         edit.title = "Draft"
@@ -103,16 +114,21 @@ class ScreenViewModelsTest {
         edit.initialize(api.todo)
         assertEquals("Task", edit.title)
 
-        val add = AddTodoViewModel(todos) {}
+        val add = edit
+        add.load("token", 1)
+        add.load("token", "id")
         add.title = "Draft"
         api.unauthorized = true
         add.save("expired") {}
         assertEquals("", add.title)
         assertEquals("", add.description)
         assertFalse(add.completed)
-
+        assertTrue(add.todos.isEmpty())
+        assertNull(add.todo)
+        assertNull(add.loadedSession)
+        assertFalse(add.confirmDelete)
         api.unauthorized = false
-        val login = LoginViewModel(auth)
+        val login = AuthViewModel(auth)
         login.email = "a@example.com"
         login.password = "password"
         login.login() {}
@@ -123,7 +139,7 @@ class ScreenViewModelsTest {
     @Test fun `a pending list request cannot be relabeled as another session`() {
         val gate = CompletableDeferred<Unit>()
         api.listGate = gate
-        val list = TodoListViewModel(todos) { throw AssertionError("Unexpected session expiry") }
+        val list = TodoViewModel(todos) { throw AssertionError("Unexpected session expiry") }
         list.load("first", 1)
         assertTrue(list.loading)
         list.load("second", 2)
@@ -139,13 +155,13 @@ class ScreenViewModelsTest {
         api.unauthorized = true
         var expired = false
         var authenticated = false
-        val login = LoginViewModel(auth)
+        val login = AuthViewModel(auth)
         login.email = "a@example.com"
         login.password = "wrong"
         login.login() { authenticated = true }
         assertFalse(authenticated)
         assertEquals("Invalid email or password", login.error)
-        val list = TodoListViewModel(todos) { expired = true }
+        val list = TodoViewModel(todos) { expired = true }
         api.unauthorized = false
         list.load("previous-session", 1)
         assertEquals(listOf(api.todo), list.todos)
@@ -184,10 +200,12 @@ class ScreenViewModelsTest {
             check(); this.authorization = authorization; assertEquals("id", id); return todo
         }
         override suspend fun create(authorization: String, todo: TodoRequestDto): TodoDto {
-            check(); this.authorization = authorization; request = todo; return this.todo
+            check(); this.authorization = authorization; request = todo
+            return this.todo.copy(id = "created", title = todo.title, description = todo.description, completed = todo.completed)
         }
         override suspend fun update(authorization: String, id: String, todo: TodoRequestDto): TodoDto {
-            check(); this.authorization = authorization; assertEquals("id", id); request = todo; return this.todo
+            check(); this.authorization = authorization; assertEquals("id", id); request = todo
+            return this.todo.copy(title = todo.title, description = todo.description, completed = todo.completed)
         }
         override suspend fun delete(authorization: String, id: String) {
             check(); this.authorization = authorization; assertEquals("id", id)

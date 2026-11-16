@@ -21,10 +21,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.todolistproject.models.TodoDto
-import com.example.todolistproject.viewmodels.TodoListViewModel
+import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
-fun TodoListView(model: TodoListViewModel, token: String, sessionVersion: Int, onAdd: () -> Unit, onOpen: (TodoDto) -> Unit, onLogout: () -> Unit) {
+fun TodoListView(model: TodoViewModel, token: String, sessionVersion: Int, onAdd: () -> Unit, onOpen: (TodoDto) -> Unit, onLogout: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         model.load(token, sessionVersion)
     }

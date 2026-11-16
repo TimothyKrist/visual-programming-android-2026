@@ -7,10 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
 import com.example.todolistproject.models.TodoDto
-import com.example.todolistproject.viewmodels.AddTodoViewModel
+import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
-fun AddTodoView(model: AddTodoViewModel, token: String, onBack: () -> Unit, onSaved: (TodoDto) -> Unit) {
+fun AddTodoView(model: TodoViewModel, token: String, onBack: () -> Unit, onSaved: (TodoDto) -> Unit) {
     LaunchedEffect(Unit) { model.clearError() }
     BackHandler { if (!model.loading) { model.clearFields(); onBack() } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

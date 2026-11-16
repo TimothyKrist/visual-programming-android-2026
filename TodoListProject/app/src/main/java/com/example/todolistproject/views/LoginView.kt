@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
-import com.example.todolistproject.viewmodels.LoginViewModel
+import com.example.todolistproject.viewmodels.AuthViewModel
 
 @Composable
-fun LoginView(model: LoginViewModel, message: String?, onLogin: () -> Unit, onRegister: () -> Unit) {
+fun LoginView(model: AuthViewModel, message: String?, onLogin: () -> Unit, onRegister: () -> Unit) {
     LaunchedEffect(Unit) { model.clearError() }
     BackHandler(enabled = model.loading) {}
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

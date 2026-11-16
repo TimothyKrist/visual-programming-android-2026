@@ -18,10 +18,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.todolistproject.models.TodoDto
-import com.example.todolistproject.viewmodels.TodoDetailViewModel
+import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
-fun TodoDetailView(model: TodoDetailViewModel, token: String, id: String, onBack: () -> Unit, onEdit: (TodoDto) -> Unit, onDeleted: () -> Unit) {
+fun TodoDetailView(model: TodoViewModel, token: String, id: String, onBack: () -> Unit, onEdit: (TodoDto) -> Unit, onDeleted: () -> Unit) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.load(token, id) }
     BackHandler { if (!model.loading) onBack() }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

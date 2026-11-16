@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
-import com.example.todolistproject.viewmodels.RegisterViewModel
+import com.example.todolistproject.viewmodels.AuthViewModel
 
 @Composable
-fun RegisterView(model: RegisterViewModel, onRegister: () -> Unit, onLogin: () -> Unit) {
+fun RegisterView(model: AuthViewModel, onRegister: () -> Unit, onLogin: () -> Unit) {
     LaunchedEffect(Unit) { model.clearError() }
     BackHandler { if (!model.loading) { model.clearFields(); onLogin() } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

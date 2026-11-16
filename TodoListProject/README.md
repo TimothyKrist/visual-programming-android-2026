@@ -6,7 +6,7 @@ A simple Jetpack Compose app using MVVM, a repository, Retrofit, and the backend
 
 - `views/` contains the Compose screens, shared UI components, and Navigation Compose graph.
 - `navigation/` defines the serializable, type-safe screen destinations.
-- `viewmodels/` contains one ViewModel per screen, plus shared session and request state.
+- `viewmodels/` contains one ViewModel per feature: `TodoViewModel` serves list, detail, add, and edit screens; `AuthViewModel` serves login and registration. Todo screens share the list back-stack entry's instance, and authentication screens share the login entry's instance, so leaving a feature clears its state. `AppViewModel` owns the session, while `RequestViewModel` provides shared request handling.
 - `models/` contains the API request and response DTOs.
 - `services/` defines separate Retrofit authentication and todo endpoints; `repositories/` provides those operations to the ViewModels.
 
