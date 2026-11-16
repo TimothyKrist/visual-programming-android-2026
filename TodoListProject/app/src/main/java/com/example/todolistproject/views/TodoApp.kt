@@ -12,8 +12,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -36,10 +38,15 @@ import com.example.todolistproject.viewmodels.AuthViewModel
 import com.example.todolistproject.viewmodels.TodoViewModel
 
 @Composable
-fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = rememberNavController()) {
-
-    LaunchedEffect(app.token, navController.currentBackStackEntryAsState().value) {
-        if (app.token == null && navController.currentDestination?.let {
+fun TodoApp(app: AppViewModel = viewModel(factory = AppViewModel.Factory), navController: NavHostController = rememberNavController()) {
+    val startDestination = remember(app) {
+        if (app.token.value == null) LoginDestination else TodoListDestination
+    }
+    val auth: AuthViewModel = viewModel(factory = viewModelFactory { initializer { AuthViewModel(app) } })
+    val token by app.token.collectAsStateWithLifecycle()
+    val sessionVersion by app.sessionVersion.collectAsStateWithLifecycle()
+    LaunchedEffect(token, navController.currentBackStackEntryAsState().value) {
+        if (token == null && navController.currentDestination?.let {
                 !it.hasRoute<LoginDestination>() && !it.hasRoute<RegisterDestination>()
             } == true) {
             navController.navigate(LoginDestination) { popUpTo(navController.graph.id) { inclusive = true } }
@@ -51,49 +58,40 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
             Text("Todo List", style = MaterialTheme.typography.headlineMedium)
             NavHost(
                 navController = navController,
-                startDestination = LoginDestination,
+                startDestination = startDestination,
                 enterTransition = { EnterTransition.None },
                 exitTransition = { ExitTransition.None },
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None }
             ) {
                 composable<LoginDestination> {
-                    val viewModel: AuthViewModel = viewModel(factory = viewModelFactory { initializer { AuthViewModel(app.authRepository) } })
-                    LoginView(viewModel, app.loginMessage,
+                    LoginView(auth,
                         onLogin = {
-                            app.clearLoginMessage()
-                            viewModel.login { token ->
-                                app.authenticated(token)
+                            auth.login {
                                 navController.navigate(TodoListDestination) { popUpTo(navController.graph.id) { inclusive = true } }
                             }
                         },
-                        onRegister = { app.clearLoginMessage(); navController.navigate(RegisterDestination) })
+                        onRegister = { auth.clearLoginMessage(); navController.navigate(RegisterDestination) })
                 }
-                composable<RegisterDestination> { entry ->
-                    val loginEntry = remember(entry) { navController.getBackStackEntry<LoginDestination>() }
-                    val viewModel: AuthViewModel = viewModel(
-                        viewModelStoreOwner = loginEntry,
-                        factory = viewModelFactory { initializer { AuthViewModel(app.authRepository) } }
-                    )
-                    RegisterView(viewModel, onRegister = {
-                        viewModel.register { token ->
-                            app.authenticated(token)
+                composable<RegisterDestination> {
+                    RegisterView(auth, onRegister = {
+                        auth.register {
                             navController.navigate(TodoListDestination) { popUpTo(navController.graph.id) { inclusive = true } }
                         }
                     }, onLogin = { navController.popBackStack() })
                 }
                 composable<TodoListDestination> { entry ->
-                    app.token?.let { token ->
-                        val viewModel = todoViewModel(app, navController, entry)
-                        TodoListView(viewModel, token, app.sessionVersion,
+                    token?.let { token ->
+                        val viewModel = todoViewModel(app, auth, navController, entry)
+                        TodoListView(viewModel, token, sessionVersion,
                             onAdd = { navController.navigate(AddTodoDestination) },
                             onOpen = { navController.navigate(TodoDetailDestination(it.id)) },
-                            onLogout = { app.logout() })
+                            onLogout = { auth.logout() })
                     }
                 }
                 composable<TodoDetailDestination> { entry ->
-                    app.token?.let { token ->
-                        val viewModel = todoViewModel(app, navController, entry)
+                    token?.let { token ->
+                        val viewModel = todoViewModel(app, auth, navController, entry)
                         val id = entry.toRoute<TodoDetailDestination>().id
                         TodoDetailView(viewModel, token, id,
                             onBack = { navController.popBackStack() },
@@ -102,16 +100,17 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
                     }
                 }
                 composable<AddTodoDestination> { entry ->
-                    app.token?.let { token ->
-                        val viewModel = todoViewModel(app, navController, entry)
+                    token?.let { token ->
+                        val viewModel = todoViewModel(app, auth, navController, entry)
                         AddTodoView(viewModel, token, onBack = { navController.popBackStack() },
                             onSaved = { navController.popBackStack() })
                     }
                 }
                 composable<EditTodoDestination> { entry ->
-                    app.token?.let { token ->
-                        val viewModel = todoViewModel(app, navController, entry)
-                        viewModel.todo?.let { todo ->
+                    token?.let { token ->
+                        val viewModel = todoViewModel(app, auth, navController, entry)
+                        val todo by viewModel.todo.collectAsStateWithLifecycle()
+                        todo?.let { todo ->
                             EditTodoView(viewModel, token, todo, onBack = { navController.popBackStack() },
                                 onSaved = { navController.popBackStack() })
                         }
@@ -123,10 +122,10 @@ fun TodoApp(app: AppViewModel = viewModel(), navController: NavHostController = 
 }
 
 @Composable
-private fun todoViewModel(app: AppViewModel, navController: NavHostController, entry: NavBackStackEntry): TodoViewModel =
+private fun todoViewModel(app: AppViewModel, auth: AuthViewModel, navController: NavHostController, entry: NavBackStackEntry): TodoViewModel =
     viewModel(
         viewModelStoreOwner = remember(entry) { navController.getBackStackEntry<TodoListDestination>() },
         factory = viewModelFactory {
-            initializer { TodoViewModel(app.todoRepository) { app.logout(expired = true) } }
+            initializer { TodoViewModel(app.todoRepository) { auth.logout(expired = true) } }
         }
     )

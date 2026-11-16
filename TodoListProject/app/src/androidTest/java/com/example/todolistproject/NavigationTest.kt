@@ -1,5 +1,7 @@
 package com.example.todolistproject
 
+import android.content.Context
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -48,7 +50,10 @@ class NavigationTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var nav: NavHostController
     private val api = FakeApi()
-    private val app = AppViewModel(AuthRepository(api), TodoRepository(api))
+    private val preferences = InstrumentationRegistry.getInstrumentation().targetContext
+        .getSharedPreferences("navigation_test_session", Context.MODE_PRIVATE)
+        .also { it.edit().clear().commit() }
+    private val app = AppViewModel(AuthRepository(api), TodoRepository(api), preferences)
 
     private fun start() {
         compose.setContent {
@@ -168,6 +173,22 @@ class NavigationTest {
         compose.onNodeWithText("Your session expired. Please log in again.").assertIsDisplayed()
         assertRoute(LoginDestination::class, null)
     }
+    @Test fun aPersistedSessionOpensTheTodoListWithoutLogin() {
+        app.setSession("saved-token")
+        val restored = AppViewModel(AuthRepository(api), TodoRepository(api), preferences)
+        compose.setContent {
+            nav = rememberNavController()
+            TodoApp(restored, nav)
+        }
+        compose.onNodeWithText("Task").assertIsDisplayed()
+        assertRoute(TodoListDestination::class, null)
+        click("Log out")
+        compose.onNodeWithText("Need an account? Register").assertIsDisplayed()
+        compose.runOnIdle {
+            assertNull(AppViewModel(AuthRepository(api), TodoRepository(api), preferences).token.value)
+        }
+    }
+
 
     @Test fun aProtectedDestinationWithoutASessionReturnsToLogin() {
         start()
